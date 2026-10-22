@@ -15,6 +15,10 @@ const float IorWater = 1.0 / 1.52; // air / water
 const float IorAir   = 1.52;       // water /air
 const vec3  WaterAlbedo = vec3(0.8,0.9,1.0);
 
+// in vanilla game night time attenuated as rgb{18 16 60}
+const float GMoonIntensity = 0.36;
+const vec3  NightAmbient   = vec3(0.3, 0.26, 1)*GMoonIntensity;
+
 const vec3  GGroundAlbedo = vec3(0.3);
 const float Fd_Lambert    = (1.0/M_PI);
 const float Fd_LambertInv = (M_PI);
@@ -66,6 +70,12 @@ float fresnel(const vec3 incident, const vec3 normal, const float ior) {
   // As a consequence of the conservation of energy, transmittance is given by:
   // kt = 1 - kr;
   return kr;
+  }
+
+vec3 waterTransmittance(float raylen) {
+  const float depth         = raylen / 5000.0; // 50 meters
+  const vec3  transmittance = exp(-depth * vec3(4,2,1) * 1.25);
+  return transmittance;
   }
 
 float safeacos(const float x) {
@@ -184,7 +194,7 @@ vec3 sampleHemisphereCos(uint i, uint numSamples, float offsetAng) {
   const float u   = sqrt(1 - xi.x);
   const float u1p = sqrt(1 - u*u);
   const float a   = M_PI*2.0*xi.y + offsetAng;
-  return vec3(cos(a) * u1p, xi.x, sin(a) * u1p);
+  return vec3(cos(a) * u1p, sin(a) * u1p, xi.x);
   }
 
 vec3 sampleSphere(uint i, uint numSamples, float offsetAng) {
@@ -234,6 +244,43 @@ vec3 i_octahedral_32( uint data ) {
   nor.x += (nor.x>0.0) ? -t : t;
   nor.y += (nor.y>0.0) ? -t : t;
   return normalize(nor);
+  }
+
+uint floatToOrderedUint(float value) {
+  uint uvalue = floatBitsToUint(value);
+  uint mask = -int(uvalue >> 31) | 0x80000000;
+  return uvalue ^ mask;
+  }
+
+uvec4 floatToOrderedUint(vec4 value) {
+  uvec4 r;
+  r.x = floatToOrderedUint(value.x);
+  r.y = floatToOrderedUint(value.y);
+  r.z = floatToOrderedUint(value.z);
+  r.w = floatToOrderedUint(value.w);
+  return r;
+  }
+
+float orderedUintToFloat(uint value) {
+  uint mask = ((value >> 31) - 1) | 0x80000000;
+  return uintBitsToFloat(value ^ mask);
+  }
+
+vec3 orderedUintToFloat(uvec3 value) {
+  vec3 r;
+  r.x = orderedUintToFloat(value.x);
+  r.y = orderedUintToFloat(value.y);
+  r.z = orderedUintToFloat(value.z);
+  return r;
+  }
+
+vec4 orderedUintToFloat(uvec4 value) {
+  vec4 r;
+  r.x = orderedUintToFloat(value.x);
+  r.y = orderedUintToFloat(value.y);
+  r.z = orderedUintToFloat(value.z);
+  r.w = orderedUintToFloat(value.w);
+  return r;
   }
 
 // the next packing/unpacking methods are taken from
@@ -331,6 +378,21 @@ vec3 normalFetch(in utexture2D gbufNormal, ivec2 p) {
   return decodeNormal(n);
   }
 
+uint wangHash(inout uint seed) {
+  seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
+  seed *= uint(9);
+  seed = seed ^ (seed >> 4);
+  seed *= uint(0x27d4eb2d);
+  seed = seed ^ (seed >> 15);
+  return seed;
+  }
+
+uint pcgHash(uint v) {
+  uint state = v * 747796405u + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+  }
+
 // PCG3D
 // https://www.jcgt.org/published/0009/03/02/
 // https://www.shadertoy.com/view/XlGcRh
@@ -373,6 +435,30 @@ vec3 dither(vec2 fragCoords, uvec3 targetBits) {
                             float((1 << targetBits.g) - 1),
                             float((1 << targetBits.b) - 1));
   return  nrnd / divisionSteps;
+  }
+
+float drawInt(in vec2 where, in int n) {
+  const float RESOLUTION = 0.5;
+  int i=int((where*=RESOLUTION).y);
+  if(0<i && i<6) {
+    i = 6-i;
+    for(int k=1, j=int(where.x); k-->0 || n>0; n/=10)
+      if ((j+=4)<3 && j>=0) {
+        int x = 0;
+        if(i>4)
+          x = 972980223;
+        else if(i>3)
+          x = 690407533;
+        else if(i>2)
+          x = 704642687;
+        else if(i>1)
+          x = 696556137;
+        else
+          x = 972881535;
+        return float(x >> (29-j-(n%10)*3)&1);
+        }
+    }
+  return 0;
   }
 
 #endif

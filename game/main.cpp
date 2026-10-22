@@ -14,8 +14,9 @@
 #include <Tempest/MetalApi>
 #endif
 
-#if defined(__IOS__)
+#if defined(__IOS__) || defined(__ANDROID__)
 #include "utils/installdetect.h"
+#include <filesystem>
 #endif
 
 #include "utils/crashlog.h"
@@ -68,7 +69,12 @@ std::unique_ptr<Tempest::AbstractGraphicsApi> mkApi(const CommandLine& g) {
   }
 
 int main(int argc,const char** argv) {
-#if defined(__IOS__)
+#if defined(__ANDROID__)
+  {
+    auto appdir = InstallDetect::androidInternalDataPath();
+    std::filesystem::current_path(appdir);
+  }
+#elif defined(__IOS__)
   {
     auto appdir = InstallDetect::applicationSupportDirectory();
     std::filesystem::current_path(appdir);
@@ -83,46 +89,46 @@ int main(int argc,const char** argv) {
       if(mode==Tempest::Log::Error)
         logFile.flush();
       });
-
-    zenkit::Logger::set(zenkit::LogLevel::INFO, [] (zenkit::LogLevel lvl, const char* cat, const char* message) {
-      (void)cat;
-      switch (lvl) {
-        case zenkit::LogLevel::ERROR:
-          Tempest::Log::e("[zenkit] ", message);
-          break;
-        case zenkit::LogLevel::WARNING:
-          Tempest::Log::e("[zenkit] ", message);
-          break;
-        case zenkit::LogLevel::INFO:
-          Tempest::Log::i("[zenkit] ", message);
-          break;
-        case zenkit::LogLevel::DEBUG:
-        case zenkit::LogLevel::TRACE:
-          Tempest::Log::d("[zenkit] ", message); // unused
-          break;
-        }
-      });
-    Dm_setLogger(DmLogLevel_INFO, [](void* ctx, DmLogLevel lvl, char const* msg) {
-      switch (lvl) {
-        case DmLogLevel_FATAL:
-        case DmLogLevel_ERROR:
-        case DmLogLevel_WARN:
-          Tempest::Log::e("[dmusic] ", msg);
-          break;
-        case DmLogLevel_INFO:
-          Tempest::Log::i("[dmusic] ", msg);
-          break;
-        case DmLogLevel_DEBUG:
-        case DmLogLevel_TRACE:
-          Tempest::Log::d("[dmusic] ", msg);
-          break;
-        }
-      }, nullptr);
     }
   catch(...) {
     Tempest::Log::e("unable to setup logfile - fallback to console log");
     }
   CrashLog::setup();
+
+  zenkit::Logger::set(zenkit::LogLevel::INFO, [] (zenkit::LogLevel lvl, const char* cat, const char* message) {
+    (void)cat;
+    switch (lvl) {
+      case zenkit::LogLevel::ERROR:
+        Tempest::Log::e("[zenkit] ", message);
+        break;
+      case zenkit::LogLevel::WARNING:
+        Tempest::Log::e("[zenkit] ", message);
+        break;
+      case zenkit::LogLevel::INFO:
+        Tempest::Log::i("[zenkit] ", message);
+        break;
+      case zenkit::LogLevel::DEBUG:
+      case zenkit::LogLevel::TRACE:
+        Tempest::Log::d("[zenkit] ", message); // unused
+        break;
+      }
+    });
+  Dm_setLogger(DmLogLevel_INFO, [](void* ctx, DmLogLevel lvl, char const* msg) {
+    switch (lvl) {
+      case DmLogLevel_FATAL:
+      case DmLogLevel_ERROR:
+      case DmLogLevel_WARN:
+        Tempest::Log::e("[dmusic] ", msg);
+        break;
+      case DmLogLevel_INFO:
+        Tempest::Log::i("[dmusic] ", msg);
+        break;
+      case DmLogLevel_DEBUG:
+      case DmLogLevel_TRACE:
+        Tempest::Log::d("[dmusic] ", msg);
+        break;
+      }
+    }, nullptr);
 
   Tempest::Log::i(appBuild);
   Workers::setThreadName("Main thread");

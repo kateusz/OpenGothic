@@ -23,6 +23,8 @@ const uint MaxInd             = (MaxPrim*3);
 const float NormalBias        = 0.0015;
 const uint  BIN_BAD_BIT       = 0x80000000;
 
+const uint  sizeof_Light      = 2 + 4*6;
+
 struct RtsmHeader {
   uint visCount;
   uint one1;
@@ -33,37 +35,10 @@ struct LightId {
   uint id;
   uint aabb_low;
   uint aabb_high;
-  uint padd0;
+  uint planeBits;
   };
 
 // utility
-uint floatToOrderedUint(float value) {
-  uint uvalue = floatBitsToUint(value);
-  uint mask = -int(uvalue >> 31) | 0x80000000;
-  return uvalue ^ mask;
-  }
-
-float orderedUintToFloat(uint value) {
-  uint mask = ((value >> 31) - 1) | 0x80000000;
-  return uintBitsToFloat(value ^ mask);
-  }
-
-vec3 orderedUintToFloat(uvec3 value) {
-  vec3 r;
-  r.x = orderedUintToFloat(value.x);
-  r.y = orderedUintToFloat(value.y);
-  r.z = orderedUintToFloat(value.z);
-  return r;
-  }
-
-vec4 orderedUintToFloat(uvec4 value) {
-  vec4 r;
-  r.x = orderedUintToFloat(value.x);
-  r.y = orderedUintToFloat(value.y);
-  r.z = orderedUintToFloat(value.z);
-  r.w = orderedUintToFloat(value.w);
-  return r;
-  }
 
 float edgeFunction(const vec2 a, const vec2 b, const vec2 c) {
   return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
@@ -124,6 +99,19 @@ uint rayToFace(vec3 d) {
   if(ad.z > ad.x && ad.z > ad.y)
     return d.z>=0 ? 4 : 5;
   return 0;
+  }
+
+vec3 vecToFace(vec3 pos, uint face){
+  // cubemap-face
+  switch(face) {
+    case 0: pos = vec3(pos.yz, +pos.x); break;
+    case 1: pos = vec3(pos.zy, -pos.x); break;
+    case 2: pos = vec3(pos.zx, +pos.y); break;
+    case 3: pos = vec3(pos.xz, -pos.y); break;
+    case 4: pos = vec3(pos.xy, +pos.z); break;
+    case 5: pos = vec3(pos.yx, -pos.z); break;
+    }
+  return pos.xyz;
   }
 
 vec2 rayToFace(vec3 pos, uint face) {

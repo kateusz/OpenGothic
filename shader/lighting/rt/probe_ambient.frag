@@ -17,14 +17,13 @@
 layout(binding  = 0, std140) uniform UboScene {
   SceneDesc scene;
   };
-layout(binding  = 1) uniform sampler2D  probesLighting;
-layout(binding  = 2) uniform sampler2D  gbufDiffuse;
-layout(binding  = 3) uniform usampler2D gbufNormal;
+layout(binding  = 1) uniform sampler2D  gbufDiffuse;
+layout(binding  = 2) uniform usampler2D gbufNormal;
+layout(binding  = 3) uniform sampler2D  ssao;
 layout(binding  = 4) uniform sampler2D  depth;
-layout(binding  = 5) uniform sampler2D  ssao;
-
-layout(binding  = 6, std430) readonly buffer Hbo0 { uint hashTable[]; };
-layout(binding  = 7, std430) readonly buffer Pbo  { ProbesHeader probeHeader; Probe probe[]; };
+layout(binding  = 5, std430) readonly buffer Hbo0 { uint hashTable[]; };
+layout(binding  = 6, std430) readonly buffer Pbo  { ProbesHeader probeHeader; Probe probe[]; };
+layout(binding  = 7) uniform sampler2D  probesLighting;
 
 layout(location = 0) out vec4 outColor;
 
@@ -173,21 +172,22 @@ void main() {
     // debug
     // colorSum = vec4(vec3(1,0,0)*scene.GSunIntensity,1);
     colorSum.rgb = probeReadAmbient(probesLighting, 0, norm, vec3(0,1,0));
-    colorSum.w   = 1;
+    colorSum.w   = 1;  // * Fd_Lambert is accounted in integration
     } else {
     colorSum.rgb = colorSum.rgb/max(colorSum.w, minW);
     }
 
   // const vec3  linear = vec3(1);
-  const vec3  linear = textureAlbedo(diff); //  * Fd_Lambert is accounted in integration
-  const float ao     = textureSsao();
-  vec3 lcolor = colorSum.rgb;
+  const vec3  linear  = textureAlbedo(diff);
+  const float ao      = textureSsao();
 
-  vec3 color  = lcolor;
-  color *= linear;
+  vec3 luminance  = vec3(0);
+  luminance += colorSum.rgb;
+  luminance += (norm.y*0.25+0.75) * NightAmbient * Fd_Lambert;
+
+  vec3 color = linear;
+  color *= luminance;
   color *= ao;
-  // night shift
-  color += purkinjeShift(color);
   color *= scene.exposure;
   outColor = vec4(color, 1);
 
